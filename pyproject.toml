@@ -1,0 +1,10 @@
+[project]
+name = "forum-scraper"
+version = "0.1.0"
+description = "Search 4x4community Tracks4Africa forum for road condition reports by place name"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "beautifulsoup4>=4.14.3",
+    "requests>=2.32.5",
+]
