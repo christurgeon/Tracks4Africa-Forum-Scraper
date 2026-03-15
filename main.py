@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from urllib.robotparser import RobotFileParser
 
-import requests
+from curl_cffi import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from rich.console import Console
@@ -39,12 +39,24 @@ CACHE_DIR = Path.home() / ".cache" / "forum-scraper"
 CACHE_TTL = timedelta(hours=2)
 MAX_RETRIES = 3
 
-# Honest user-agent — identifies who we are rather than impersonating a browser
+# curl_cffi handles the User-Agent and TLS fingerprint automatically via impersonate="chrome120".
+# These headers are supplementary — the UA below is overridden by curl_cffi.
 HEADERS = {
-    "User-Agent": "forum-condition-scraper/1.0 (personal use; road condition monitoring; not commercial)",
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ),
     "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.5",
     "Referer": BASE_URL,
+}
+
+# Extra headers needed for POSTs (search, login) to pass CSRF checks
+POST_HEADERS = {
+    **HEADERS,
+    "Content-Type": "application/x-www-form-urlencoded",
+    "Origin": "https://www.4x4community.co.za",
+    "Referer": SEARCH_URL,
 }
 
 
@@ -107,7 +119,7 @@ def get(url: str, session: requests.Session, cache_key: Optional[str] = None) ->
             if cache_key:
                 cache_set(cache_key, resp.text)
             return BeautifulSoup(resp.text, "html.parser")
-        except requests.RequestException as e:
+        except Exception as e:
             if attempt < MAX_RETRIES:
                 wait = 10 * attempt
                 console.print(f"\n  [yellow]⚠  {e} — retry {attempt}/{MAX_RETRIES} in {wait}s[/yellow]")
@@ -120,7 +132,7 @@ def get(url: str, session: requests.Session, cache_key: Optional[str] = None) ->
 def post(url: str, data: dict, session: requests.Session) -> Optional[requests.Response]:
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            resp = session.post(url, data=data, headers=HEADERS, timeout=15, allow_redirects=True)
+            resp = session.post(url, data=data, headers=POST_HEADERS, timeout=15, allow_redirects=True)
             if resp.status_code == 429:
                 wait = 30 * attempt
                 console.print(f"\n  [yellow]⚠  Rate limited — backing off {wait}s[/yellow]")
@@ -128,7 +140,7 @@ def post(url: str, data: dict, session: requests.Session) -> Optional[requests.R
                 continue
             resp.raise_for_status()
             return resp
-        except requests.RequestException as e:
+        except Exception as e:
             if attempt < MAX_RETRIES:
                 wait = 10 * attempt
                 console.print(f"\n  [yellow]⚠  {e} — retry {attempt}/{MAX_RETRIES} in {wait}s[/yellow]")
@@ -191,7 +203,7 @@ def search_forum(keyword: str, session: requests.Session, days: int = 0) -> Opti
     Results are sorted newest-first by default.
     days=0 means no date filter; days=90 means last 90 days only.
     """
-    token = get_security_token(session, SEARCH_URL)
+    token = get_security_token(session, BASE_URL)
 
     data = {
         "do": "process",
@@ -304,7 +316,9 @@ def fetch_thread_posts(url: str, session: requests.Session, n: int = 3) -> list[
 
 def run(places: list[str], max_pages: int, show_content: bool, delay: float,
         username: Optional[str] = None, password: Optional[str] = None, days: int = 0):
-    session = requests.Session()
+    # impersonate="chrome120" gives us a real Chrome TLS fingerprint,
+    # which is required to pass Cloudflare Bot Management on search.php
+    session = requests.Session(impersonate="chrome120")
 
     console.rule("[bold]Tracks4Africa Forum — Condition Scraper[/bold]")
     console.print()
@@ -317,7 +331,7 @@ def run(places: list[str], max_pages: int, show_content: bool, delay: float,
     console.print(f"  Cache      : {CACHE_DIR}  [dim](TTL {int(CACHE_TTL.total_seconds() / 3600)}h)[/dim]")
     console.print()
 
-    # ── Login (required for search) ───────────────────────────────────────────
+    # ── Credentials & Cloudflare cookie ──────────────────────────────────────
     username = username or os.environ.get("FORUM_USERNAME")
     password = password or os.environ.get("FORUM_PASSWORD")
 
@@ -327,6 +341,19 @@ def run(places: list[str], max_pages: int, show_content: bool, delay: float,
         console.print("  or pass [bold]--username[/bold] / [bold]--password[/bold] on the command line.")
         console.print("  (The forum requires login to use its search.)\n")
         return
+
+    # Cloudflare issues a cf_clearance cookie to browsers that pass its challenge.
+    # Our requests session can reuse that cookie to bypass the check on search.php.
+    # Get it from your browser devtools (Application → Cookies) and add to .env.
+    cf_clearance = os.environ.get("CF_CLEARANCE")
+    if cf_clearance:
+        session.cookies.set("cf_clearance", cf_clearance, domain=".4x4community.co.za")
+        console.print("  [dim]cf_clearance cookie loaded ✓[/dim]")
+    else:
+        console.print("  [yellow]⚠  CF_CLEARANCE not set — search.php may be blocked by Cloudflare.[/yellow]")
+        console.print("  [dim]Get it from browser devtools (Application → Cookies → 4x4community.co.za)[/dim]")
+        console.print("  [dim]and add CF_CLEARANCE=<value> to your .env file.[/dim]")
+        console.print()
 
     polite_delay(delay)
     if not login(session, username, password):

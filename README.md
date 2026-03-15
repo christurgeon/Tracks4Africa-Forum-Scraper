@@ -19,20 +19,28 @@ That's it. `uv sync` installs all dependencies into an isolated virtual environm
 
 ## Credentials
 
-The forum's search requires you to be logged in. Pass your credentials either as environment variables (recommended — keeps them out of your shell history) or as command-line flags.
+The forum's search page is protected by Cloudflare. Three values are required in your `.env` file:
 
-**Environment variables (recommended):**
-```bash
-export FORUM_USERNAME=your_username
-export FORUM_PASSWORD=your_password
+```
+FORUM_USERNAME=your_username
+FORUM_PASSWORD=your_password
+CF_CLEARANCE=your_cf_clearance_cookie
 ```
 
-You can put these in your `~/.zshrc` or `~/.bash_profile` so you don't have to set them each session.
+Copy `.env.example` to `.env` and fill in the values:
 
-**Or inline per run:**
 ```bash
-FORUM_USERNAME=you FORUM_PASSWORD=secret uv run main.py "Moremi"
+cp .env.example .env
 ```
+
+**Getting `CF_CLEARANCE`:**
+
+1. Visit [4x4community.co.za](https://www.4x4community.co.za) in your browser and log in
+2. Open DevTools → **Application** tab (Chrome) or **Storage** tab (Safari)
+3. Navigate to Cookies → `www.4x4community.co.za`
+4. Copy the value of the `cf_clearance` cookie and paste it into `.env`
+
+This cookie typically lasts several hours to a few days. If you start getting 403 errors again, refresh it using the same steps.
 
 ## Usage
 
@@ -91,7 +99,6 @@ For each keyword you provide, the scraper:
 
 The scraper is designed not to hammer the server:
 
-- **Honest User-Agent** — identifies itself as a scraper rather than impersonating a browser
 - **`robots.txt` check** — verifies the search URL is allowed before doing anything; aborts if not
 - **Randomised delay** — waits `delay ± 30%` seconds between every request (jitter prevents predictable request patterns)
 - **Exponential backoff** — if a request fails or returns HTTP 429 (rate limited), it backs off and retries up to 3 times before giving up
