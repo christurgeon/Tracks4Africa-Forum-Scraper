@@ -138,6 +138,11 @@ def post(url: str, data: dict, session: requests.Session) -> Optional[requests.R
                 console.print(f"\n  [yellow]⚠  Rate limited — backing off {wait}s[/yellow]")
                 time.sleep(wait)
                 continue
+            if resp.status_code == 403:
+                console.print(f"\n  [bold red]✗  403 Forbidden — your CF_CLEARANCE cookie has expired.[/bold red]")
+                console.print("  Refresh it: browser DevTools → Cookies → www.4x4community.co.za → cf_clearance")
+                console.print("  Then update [bold]CF_CLEARANCE[/bold] in your .env file and re-run.\n")
+                return None
             resp.raise_for_status()
             return resp
         except Exception as e:
@@ -342,18 +347,25 @@ def run(places: list[str], max_pages: int, show_content: bool, delay: float,
         console.print("  (The forum requires login to use its search.)\n")
         return
 
-    # Cloudflare issues a cf_clearance cookie to browsers that pass its challenge.
-    # Our requests session can reuse that cookie to bypass the check on search.php.
-    # Get it from your browser devtools (Application → Cookies) and add to .env.
+    # Cloudflare issues a cf_clearance cookie to browsers that pass its JS challenge.
+    # search.php requires this — without it every POST returns 403.
     cf_clearance = os.environ.get("CF_CLEARANCE")
-    if cf_clearance:
-        session.cookies.set("cf_clearance", cf_clearance, domain=".4x4community.co.za")
-        console.print("  [dim]cf_clearance cookie loaded ✓[/dim]")
-    else:
-        console.print("  [yellow]⚠  CF_CLEARANCE not set — search.php may be blocked by Cloudflare.[/yellow]")
-        console.print("  [dim]Get it from browser devtools (Application → Cookies → 4x4community.co.za)[/dim]")
-        console.print("  [dim]and add CF_CLEARANCE=<value> to your .env file.[/dim]")
+    if not cf_clearance:
+        console.print("  [bold red]✗  CF_CLEARANCE is not set.[/bold red]")
         console.print()
+        console.print("  The forum's search page is behind Cloudflare and requires this cookie.")
+        console.print("  To get it:")
+        console.print("    1. Open the forum in your browser and log in")
+        console.print("    2. Open DevTools → Application (Chrome) / Storage (Safari) → Cookies")
+        console.print("    3. Find [bold]cf_clearance[/bold] under www.4x4community.co.za")
+        console.print("    4. Copy its value and add it to your [bold].env[/bold] file:")
+        console.print()
+        console.print("       [dim]CF_CLEARANCE=paste_value_here[/dim]")
+        console.print()
+        return
+
+    session.cookies.set("cf_clearance", cf_clearance, domain=".4x4community.co.za")
+    console.print("  [dim]cf_clearance cookie loaded ✓[/dim]")
 
     polite_delay(delay)
     if not login(session, username, password):
@@ -389,8 +401,6 @@ def run(places: list[str], max_pages: int, show_content: bool, delay: float,
         searchid = search_forum(keyword, session, days=days)
 
         if not searchid:
-            console.print(f"[red]✗  Could not get a searchid. The forum may require login.[/red]")
-            console.print(f"  [dim]Try searching manually: {SEARCH_URL}[/dim]")
             all_results[keyword] = []
             continue
 
