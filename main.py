@@ -39,13 +39,17 @@ CACHE_DIR = Path.home() / ".cache" / "tracks4africa-forum-scraper"
 CACHE_TTL = timedelta(hours=2)
 MAX_RETRIES = 3
 
-# curl_cffi handles the User-Agent and TLS fingerprint automatically via impersonate="chrome120".
-# These headers are supplementary — the UA below is overridden by curl_cffi.
+# cf_clearance is bound to the User-Agent of the browser that generated it.
+# FORUM_USER_AGENT must match exactly, otherwise Cloudflare will reject the cookie.
+# Get it from your browser: DevTools → Network → any request → User-Agent header.
+_USER_AGENT = os.environ.get(
+    "FORUM_USER_AGENT",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+)
+
 HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    ),
+    "User-Agent": _USER_AGENT,
     "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.5",
     "Referer": BASE_URL,
@@ -349,23 +353,34 @@ def run(places: list[str], max_pages: int, show_content: bool, delay: float,
 
     # Cloudflare issues a cf_clearance cookie to browsers that pass its JS challenge.
     # search.php requires this — without it every POST returns 403.
+    # The cookie is also bound to the exact User-Agent that generated it (FORUM_USER_AGENT).
     cf_clearance = os.environ.get("CF_CLEARANCE")
     if not cf_clearance:
         console.print("  [bold red]✗  CF_CLEARANCE is not set.[/bold red]")
         console.print()
         console.print("  The forum's search page is behind Cloudflare and requires this cookie.")
-        console.print("  To get it:")
-        console.print("    1. Open the forum in your browser and log in")
-        console.print("    2. Open DevTools → Application (Chrome) / Storage (Safari) → Cookies")
-        console.print("    3. Find [bold]cf_clearance[/bold] under www.4x4community.co.za")
-        console.print("    4. Copy its value and add it to your [bold].env[/bold] file:")
+        console.print("  To get both values, open the forum in your browser and log in, then:")
         console.print()
-        console.print("       [dim]CF_CLEARANCE=paste_value_here[/dim]")
+        console.print("  [bold]1. Get CF_CLEARANCE[/bold]")
+        console.print("     DevTools → Application (Chrome) / Storage (Safari)")
+        console.print("     → Cookies → www.4x4community.co.za → [bold]cf_clearance[/bold]")
+        console.print()
+        console.print("  [bold]2. Get FORUM_USER_AGENT[/bold]")
+        console.print("     DevTools → Network → click any request → Headers → [bold]User-Agent[/bold]")
+        console.print()
+        console.print("  Add both to your [bold].env[/bold] file:")
+        console.print("  [dim]CF_CLEARANCE=paste_value_here[/dim]")
+        console.print("  [dim]FORUM_USER_AGENT=paste_user_agent_here[/dim]")
         console.print()
         return
 
+    if not os.environ.get("FORUM_USER_AGENT"):
+        console.print("  [yellow]⚠  FORUM_USER_AGENT not set — Cloudflare may reject cf_clearance.[/yellow]")
+        console.print("  [dim]Get it from DevTools → Network → any request → User-Agent header.[/dim]")
+        console.print()
+
     session.cookies.set("cf_clearance", cf_clearance, domain=".4x4community.co.za")
-    console.print("  [dim]cf_clearance cookie loaded ✓[/dim]")
+    console.print(f"  [dim]cf_clearance loaded ✓  |  UA: {_USER_AGENT[:60]}...[/dim]")
 
     polite_delay(delay)
     if not login(session, username, password):
