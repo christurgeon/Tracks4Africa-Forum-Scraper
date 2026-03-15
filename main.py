@@ -11,6 +11,7 @@ Usage:
 import re
 import time
 import argparse
+from typing import Optional
 
 import requests
 from bs4 import BeautifulSoup
@@ -28,7 +29,7 @@ HEADERS = {
 }
 
 
-def fetch(url: str, session: requests.Session) -> BeautifulSoup | None:
+def fetch(url: str, session: requests.Session) -> Optional[BeautifulSoup]:
     try:
         resp = session.get(url, headers=HEADERS, timeout=15)
         resp.raise_for_status()
@@ -61,7 +62,7 @@ def get_threads(soup: BeautifulSoup) -> list[dict]:
     return threads
 
 
-def next_page_url(soup: BeautifulSoup) -> str | None:
+def next_page_url(soup: BeautifulSoup) -> Optional[str]:
     link = soup.find("a", rel="next") or soup.find("a", title=re.compile(r"next page", re.I))
     if link and link.get("href"):
         href = link["href"]
@@ -90,7 +91,7 @@ def search(places: list[str], max_pages: int, show_content: bool, delay: float):
     print("=" * 70)
 
     matches = []
-    url: str | None = FORUM_URL
+    url: Optional[str] = FORUM_URL
 
     for page in range(1, max_pages + 1):
         if not url:
