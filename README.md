@@ -106,8 +106,8 @@ The scraper is designed not to hammer the server:
 
 ### Cache
 
-Cached files live at `~/.cache/forum-scraper/` as JSON files keyed by a hash of the URL. They expire after 2 hours. To force a fresh fetch, delete the cache directory:
+Cached files live at `~/.cache/tracks4africa-forum-scraper/` as JSON files keyed by a hash of the URL. They expire after 2 hours. To force a fresh fetch, delete the cache directory:
 
 ```bash
-rm -rf ~/.cache/forum-scraper
+rm -rf ~/.cache/tracks4africa-forum-scraper
 ```

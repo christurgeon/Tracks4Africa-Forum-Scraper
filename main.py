@@ -35,7 +35,7 @@ BASE_URL    = "https://www.4x4community.co.za/forum"
 SEARCH_URL  = f"{BASE_URL}/search.php"
 FORUM_ID    = "247"   # Tracks4Africa-ONLY subforum
 
-CACHE_DIR = Path.home() / ".cache" / "forum-scraper"
+CACHE_DIR = Path.home() / ".cache" / "tracks4africa-forum-scraper"
 CACHE_TTL = timedelta(hours=2)
 MAX_RETRIES = 3
 
