@@ -181,10 +181,12 @@ def login(session: requests.Session, username: str, password: str) -> bool:
 
 # ── vBulletin search ──────────────────────────────────────────────────────────
 
-def search_forum(keyword: str, session: requests.Session) -> Optional[str]:
+def search_forum(keyword: str, session: requests.Session, days: int = 0) -> Optional[str]:
     """
     POST a search to vBulletin and return the searchid.
     Searches post content (not just titles) within forum 247.
+    Results are sorted newest-first by default.
+    days=0 means no date filter; days=90 means last 90 days only.
     """
     token = get_security_token(session, SEARCH_URL)
 
@@ -195,6 +197,10 @@ def search_forum(keyword: str, session: requests.Session) -> Optional[str]:
         "forumchoice[]": FORUM_ID,
         "childforums": "1",
         "showposts": "0",        # group by thread, not individual posts
+        "sortby": "dateline",    # sort by post date
+        "order": "descending",   # newest first
+        "searchdate": str(days) if days > 0 else "0",
+        "beforeafter": "after",  # threads newer than searchdate
         "searchsubmit": "1",
         "securitytoken": token,
     }
@@ -294,7 +300,7 @@ def fetch_thread_posts(url: str, session: requests.Session, n: int = 3) -> list[
 # ── Orchestration ─────────────────────────────────────────────────────────────
 
 def run(places: list[str], max_pages: int, show_content: bool, delay: float,
-        username: Optional[str] = None, password: Optional[str] = None):
+        username: Optional[str] = None, password: Optional[str] = None, days: int = 0):
     session = requests.Session()
 
     console.rule("[bold]Tracks4Africa Forum — Condition Scraper[/bold]")
@@ -302,6 +308,8 @@ def run(places: list[str], max_pages: int, show_content: bool, delay: float,
     console.print(f"  Searching  : [cyan]{', '.join(places)}[/cyan]")
     console.print(f"  Subforum   : Tracks4Africa-ONLY (ID {FORUM_ID})")
     console.print(f"  Max pages  : {max_pages} per keyword")
+    console.print(f"  Date filter: {'last ' + str(days) + ' days' if days > 0 else 'any date'}")
+    console.print(f"  Sort order : newest first")
     console.print(f"  Delay      : ~{delay}s between requests (±30% jitter)")
     console.print(f"  Cache      : {CACHE_DIR}  [dim](TTL {int(CACHE_TTL.total_seconds() / 3600)}h)[/dim]")
     console.print()
@@ -348,7 +356,7 @@ def run(places: list[str], max_pages: int, show_content: bool, delay: float,
 
         console.print(f"  Submitting search to forum...", end=" ")
         polite_delay(delay)
-        searchid = search_forum(keyword, session)
+        searchid = search_forum(keyword, session, days=days)
 
         if not searchid:
             console.print(f"[red]✗  Could not get a searchid. The forum may require login.[/red]")
@@ -427,12 +435,14 @@ def main():
     parser.add_argument("--pages", type=int, default=5, help="Max result pages per keyword (default: 5)")
     parser.add_argument("--content", action="store_true", help="Fetch and show first posts of each matching thread")
     parser.add_argument("--delay", type=float, default=2.5, help="Base delay between requests in seconds (default: 2.5)")
+    parser.add_argument("--days", type=int, default=0,
+                        help="Only show threads from the last N days, e.g. --days 90. Default: no filter")
     parser.add_argument("--username", default=None, help="Forum username (or set FORUM_USERNAME env var)")
     parser.add_argument("--password", default=None, help="Forum password (or set FORUM_PASSWORD env var)")
     args = parser.parse_args()
 
     run(args.places, max_pages=args.pages, show_content=args.content, delay=args.delay,
-        username=args.username, password=args.password)
+        username=args.username, password=args.password, days=args.days)
 
 
 if __name__ == "__main__":
