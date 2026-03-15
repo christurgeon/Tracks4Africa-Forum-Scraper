@@ -22,9 +22,12 @@ from urllib.robotparser import RobotFileParser
 
 import requests
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 from rich.console import Console
 from rich.live import Live
 from rich.text import Text
+
+load_dotenv()
 
 console = Console(highlight=False)
 
