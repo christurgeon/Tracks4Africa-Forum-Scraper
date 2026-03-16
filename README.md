@@ -67,13 +67,52 @@ uv run main.py "Okavango" --pages 10
 uv run main.py "Chobe" "Savuti" "Linyanti" --days 365 --content
 ```
 
+### Dump threads for analysis
+
+The `--dump` flag fetches full thread content and writes structured JSON to `data/` for offline analysis with Claude:
+
+```bash
+# Dump all threads from the subforum
+uv run main.py --dump
+
+# Dump only threads matching keywords (filters by title/preview)
+uv run main.py "Baviaanskloof" "Sani Pass" --dump
+
+# Limit to first 5 listing pages
+uv run main.py --dump --pages 5
+```
+
+This creates:
+```
+data/
+  threads.json              # index of all scraped threads
+  threads/
+    12345.json              # full thread with all posts (author, date, text)
+    12346.json
+    ...
+```
+
+Re-running `--dump` is **incremental** — threads with the same reply count are skipped.
+
+Once data is scraped, use Claude Code to analyze it:
+
+```bash
+# Open Claude Code in the project directory and ask questions like:
+# "Read the analysis prompt and data files. What are recent conditions on Baviaanskloof?"
+# "Which routes had reported closures?"
+# "Compare Sani Pass vs Baviaanskloof based on the forum reports"
+```
+
+The analysis prompt at `analysis/prompt.md` provides context for Claude to act as a trip-planning assistant.
+
 ### All options
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--days N` | 0 (any date) | Only return threads from the last N days |
 | `--content` | off | Fetch and display the first 3 posts of each matching thread |
-| `--pages N` | 5 | Max pages of results to fetch per keyword (25 threads/page) |
+| `--dump` | off | Fetch full thread content and write to `data/` as JSON |
+| `--pages N` | 5 | Max pages to fetch (search results or forum listing) |
 | `--delay N` | 2.5 | Base seconds to wait between requests (see Politeness below) |
 | `--username` | — | Forum username (overrides `FORUM_USERNAME` env var) |
 | `--password` | — | Forum password (overrides `FORUM_PASSWORD` env var) |
@@ -82,7 +121,7 @@ uv run main.py "Chobe" "Savuti" "Linyanti" --days 365 --content
 
 ### Search approach
 
-Rather than scraping the forum's listing pages one by one, the scraper uses the forum's **own search engine** (`search.php`) — exactly what the website does when you search in your browser. This means:
+The default mode uses the forum's **own search engine** (`search.php`) — exactly what the website does when you search in your browser. This means:
 
 - Results cover the **entire forum archive**, not just recent pages
 - Searches match keywords in **post content**, not just thread titles
@@ -94,6 +133,12 @@ For each keyword you provide, the scraper:
 2. POSTs a search request, receiving a `searchid` back from the server
 3. Paginates through the result pages using that `searchid`
 4. Optionally fetches and previews post content from each matching thread
+
+### Dump approach
+
+The `--dump` flag bypasses `search.php` entirely. Instead, it browses the forum listing (`forumdisplay.php`) to discover threads, then fetches the full content of each one. This is more reliable since the listing pages aren't behind Cloudflare's stricter challenge rules.
+
+If keywords are provided, threads are filtered client-side by title and preview text.
 
 ### Politeness
 
